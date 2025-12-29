@@ -1,124 +1,83 @@
-<!DOCTYPE html>
-
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta content="width=device-width,initial-scale=1" name="viewport"/>
-<meta content="Salary query - lookup employee salary basics" name="description"/>
-<title>iEnergy | Salary Query</title>
-<link href="../home.css?v=2" rel="stylesheet"/>
-<link href="salary-query.css?v=2" rel="stylesheet"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="description" content="Salary query - lookup employee salary basics" />
+  <title>iEnergy | Salary Query</title>
+  <link rel="stylesheet" href="../home.css?v=2" />
+  <link rel="stylesheet" href="salary-query.css?v=3" />
 </head>
 <body>
-<main class="container">
-<header class="hero hero-compact">
-<div class="hero-text">
-<div class="pill">HR Tool</div>
-<h1>Salary Query</h1>
-<p class="tagline">Lookup employee basic data by employee code.</p>
-<div class="top-actions">
-<a class="link" href="../">← iEnergy Home</a>
-</div>
-</div>
-<img alt="iEnergy logo" class="hero-logo hero-logo-compact" src="../logo.jpg"/>
-</header>
-<section class="section">
-<h2>Lookup</h2>
-<p class="section-sub">Enter the employee code, then press Search.</p><div class="card auth-card" id="authGate"><h2>Password Required</h2><p class="muted">Enter the password to access Salary Query. The session stays unlocked for 10 minutes.</p><div class="row row-auth"><label class="label" for="sqPassword">Password</label><input autocomplete="current-password" class="input" id="sqPassword" placeholder="•••••••" type="password"/><button class="btn" id="sqUnlock">Unlock</button></div><div aria-live="polite" class="status" id="sqAuthMsg"></div></div><div class="hidden" id="queryApp"><div class="card">
-<div class="row">
-<label class="label" for="empCode">Employee Code</label>
-<input autocomplete="off" class="input" id="empCode" inputmode="numeric" placeholder="e.g., 10235"/>
-<button class="btn" id="btnSearch">Search</button>
-</div>
-<div aria-live="polite" class="status" id="status"></div>
-<div class="card hidden" id="fileFallback">
-<h3>Excel file source</h3>
-<p class="muted">If the site cannot fetch <code>data/employees.xlsx</code> from GitHub Pages, upload the file here as a fallback.</p>
-<div class="row">
-<label class="label" for="excelFile">Select .xlsx</label>
-<input accept=".xlsx" class="input" id="excelFile" type="file"/>
-</div>
-<p class="hint">Expected headers in row 1: <code>EmployeeCode</code>, <code>Name</code>, <code>Position</code>, <code>HiringDate</code>, <code>BasicGrossSalary</code>, <code>BasicSocialInsuranceSalary</code>.</p>
-</div>
-<div class="result hidden" id="result">
-<div class="result-grid">
-<div class="result-item">
-<div class="k">Name</div>
-<div class="v" id="rName">—</div>
-</div>
-<div class="result-item">
-<div class="k">Position</div>
-<div class="v" id="rPosition">—</div>
-</div>
-<div class="result-item">
-<div class="k">Hiring Date</div>
-<div class="v" id="rHiringDate">—</div>
-</div>
-<div class="result-item">
-<div class="k">Basic Gross Salary</div>
-<div class="v" id="rBasicGross">—</div>
-</div>
-<div class="result-item">
-<div class="k">Basic Social Insurance Salary</div>
-<div class="v" id="rBasicSI">—</div>
-</div>
-</div>
-</div>
-</div></div>
+  <!-- Auth (popup style) -->
+  <div id="auth" class="auth">
+    <div class="auth-card">
+      <div class="auth-top">
+        <div class="auth-title">
+          <a class="back-link" href="../index.html">← iEnergy Home</a>
+          <h1>Salary Query</h1>
+          <p>Please enter the password to continue.</p>
+        </div>
+        <img class="logo" src="../logo.jpg" alt="Company logo" />
+      </div>
 
-</section>
-<footer class="footer">
-<small>© <span id="year"></span> iEnergy. Internal use.</small>
-</footer>
-</main>
-<!-- SheetJS (XLSX) loader with CDN fallbacks -->
-<script>
-    (function() {
-      const SOURCES = [
-        // Authoritative CDN (recommended by SheetJS CE docs)
-        'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js',
-        // Fallbacks (may be older)
-        'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
-        'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js'
-      ];
+      <label class="auth-label" for="passwordInput">Password</label>
+      <input id="passwordInput" class="auth-input" type="password" autocomplete="current-password" placeholder="•••••••" />
 
-      function loadScript(src) {
-        return new Promise((resolve, reject) => {
-          const s = document.createElement('script');
-          s.src = src;
-          s.async = true;
-          s.onload = () => resolve(src);
-          s.onerror = () => reject(new Error('Failed to load ' + src));
-          document.head.appendChild(s);
-        });
-      }
+      <div class="auth-actions">
+        <button id="btnLogin" class="primary" type="button">Unlock</button>
+      </div>
 
-      function loadApp() {
-        const s = document.createElement('script');
-        s.src = 'salary-query.js?v=3';
-        s.defer = true;
-        document.body.appendChild(s);
-      }
+      <div id="authError" class="auth-error" hidden>Incorrect password.</div>
+    </div>
+  </div>
 
-      (async function() {
-        for (const src of SOURCES) {
-          try {
-            await loadScript(src);
-            if (window.XLSX) {
-              loadApp();
-              return;
-            }
-          } catch (e) {
-            // try next
-          }
-        }
+  <!-- App -->
+  <main id="app" class="container" hidden>
+    <header class="hero hero-compact">
+      <div class="hero-text">
+        <div class="pill">HR Tool</div>
+        <h1>Salary Query</h1>
+        <p class="tagline">Lookup employee basic data by employee code.</p>
+        <div class="top-actions">
+          <a class="link" href="../">← iEnergy Home</a>
+        </div>
+      </div>
+      <img alt="iEnergy logo" class="hero-logo hero-logo-compact" src="../logo.jpg" />
+    </header>
 
-        // If nothing worked, still load the app so it can show the user-facing error message
-        loadApp();
-      })();
-    })();
+    <section class="section">
+      <h2>Lookup</h2>
+      <p class="section-sub">Enter the employee code, then press Search.</p>
 
-    document.getElementById('year').textContent = String(new Date().getFullYear());
-  </script>
+      <div class="card">
+        <div class="row">
+          <label class="label" for="empCode">Employee Code</label>
+          <input autocomplete="off" class="input" id="empCode" inputmode="numeric" placeholder="e.g., 10235" />
+          <button class="btn" id="btnSearch">Search</button>
+        </div>
+
+        <div id="status" class="status" aria-live="polite"></div>
+
+        <div id="result" class="result hidden">
+          <h3>Employee</h3>
+          <div class="kv">
+            <div class="kv-row"><div class="k">Name</div><div class="v" id="rName">—</div></div>
+            <div class="kv-row"><div class="k">Position</div><div class="v" id="rPosition">—</div></div>
+            <div class="kv-row"><div class="k">Hiring date</div><div class="v" id="rHireDate">—</div></div>
+            <div class="kv-row"><div class="k">Basic gross salary</div><div class="v" id="rBasicGross">—</div></div>
+            <div class="kv-row"><div class="k">Insurable salary base</div><div class="v" id="rInsurable">—</div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <small>© <span id="year"></span> iEnergy. Internal use.</small>
+    </footer>
+  </main>
+
+  <script src="salary-query.js?v=3"></script>
+  <script>document.getElementById('year').textContent = String(new Date().getFullYear());</script>
 </body>
 </html>
