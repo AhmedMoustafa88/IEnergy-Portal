@@ -106,3 +106,6 @@
   .btn { width: 100%; }
   .result-grid { grid-template-columns: 1fr; }
 }
+
+
+.muted { opacity: 0.85; }

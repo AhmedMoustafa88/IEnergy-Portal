@@ -11,6 +11,7 @@
   const elBtn = document.getElementById('btnSearch');
   const elStatus = document.getElementById('status');
   const elResult = document.getElementById('result');
+  const elExcelFile = document.getElementById('excelFile');
 
   const rName = document.getElementById('rName');
   const rPosition = document.getElementById('rPosition');
@@ -68,27 +69,131 @@
     return '';
   }
 
-  async function loadEmployees() {
-    if (loaded) return;
+  function getRepoBasePrefix() {
+  // For GitHub Project Pages, the site is served from /<repo-name>/...
+  // For User Pages or custom domains, it is typically served from /.
+  const parts = window.location.pathname.split('/').filter(Boolean);
+  if (parts.length === 0) return '/';
+  // If you're already on a user site root, using '/' still works.
+  return `/${parts[0]}/`;
+}
+
+function buildExcelCandidates() {
+  const candidates = [];
+
+  // Most common layouts
+  candidates.push(new URL('../data/employees.xlsx', window.location.href).toString()); // salary-query/ -> data/
+  candidates.push(new URL('data/employees.xlsx', window.location.href).toString());   // if salary-query is root
+  candidates.push(new URL('./data/employees.xlsx', window.location.href).toString()); // if current folder contains data/
+
+  // GitHub Project Pages base path
+  const repoBase = getRepoBasePrefix();
+  candidates.push(new URL(repoBase + 'data/employees.xlsx', window.location.origin).toString());
+
+  // If the repo contents were committed under an extra folder (common when uploading a zip folder)
+  candidates.push(new URL(repoBase + 'Salary-Calculator-main/data/employees.xlsx', window.location.origin).toString());
+  candidates.push(new URL('/Salary-Calculator-main/data/employees.xlsx', window.location.origin).toString());
+
+  // User Pages / custom domain root
+  candidates.push(new URL('/data/employees.xlsx', window.location.origin).toString());
+
+  // De-duplicate while preserving order
+  const seen = new Set();
+  return candidates.filter((u) => (seen.has(u) ? false : (seen.add(u), true)));
+}
+
+async function fetchExcelWithFallback() {
+  const urls = buildExcelCandidates();
+  const attempts = [];
+
+  for (const url of urls) {
     try {
-      elStatus.textContent = 'Loading employees file…';
-      const resp = await fetch(EXCEL_PATH, { cache: 'no-store' });
-      if (!resp.ok) throw new Error(`Failed to fetch Excel (${resp.status})`);
+      const resp = await fetch(url, { cache: 'no-store' });
+      attempts.push({ url, status: resp.status, ok: resp.ok });
+
+      if (!resp.ok) continue;
 
       const buf = await resp.arrayBuffer();
-      const wb = XLSX.read(buf, { type: 'array', cellDates: true });
-      const first = wb.SheetNames[0];
-      if (!first) throw new Error('Excel file has no sheets.');
+      if (!buf || buf.byteLength < 64) continue;
 
-      const ws = wb.Sheets[first];
-      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      return { buf, url, attempts };
+    } catch (e) {
+      attempts.push({ url, error: String(e) });
+    }
+  }
 
-      const map = new Map();
-      for (const row of rows) {
-        const code = normalizeCode(getField(row, ['EmployeeCode', 'Employee Code', 'EmpCode', 'Code', 'Employee_ID', 'EmployeeID']));
-        if (!code) continue;
-        map.set(code, row);
-      }
+  const err = new Error('All Excel URL candidates failed.');
+  err.attempts = attempts;
+  throw err;
+}
+
+function loadFromRows(rows) {
+  const map = new Map();
+  for (const row of rows) {
+    const code = normalizeCode(getField(row, ['EmployeeCode', 'Employee Code', 'EmpCode', 'Code', 'Employee_ID', 'EmployeeID']));
+    if (!code) continue;
+    map.set(code, row);
+  }
+  employeeMap = map;
+  loaded = true;
+  elStatus.textContent = `Loaded ${employeeMap.size} employees.`;
+  setTimeout(() => { if (elStatus.textContent.startsWith('Loaded')) elStatus.textContent = ''; }, 1800);
+}
+
+function parseExcelArrayBuffer(buf) {
+  const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+  const first = wb.SheetNames[0];
+  if (!first) throw new Error('Excel file has no sheets.');
+  const ws = wb.Sheets[first];
+  return XLSX.utils.sheet_to_json(ws, { defval: '' });
+}
+
+async function loadEmployees() {
+  if (loaded) return;
+  try {
+    elStatus.textContent = 'Loading employees file…';
+
+    const { buf, url, attempts } = await fetchExcelWithFallback();
+    const rows = parseExcelArrayBuffer(buf);
+    loadFromRows(rows);
+
+    // Keep a small debug hint in console for troubleshooting
+    console.info('Employees loaded from:', url, attempts);
+  } catch (err) {
+    console.error(err);
+    const attempts = err && err.attempts ? err.attempts : [];
+    const lines = attempts.slice(0, 6).map(a => {
+      if (a.error) return `• ${a.url} → ${a.error}`;
+      return `• ${a.url} → HTTP ${a.status}${a.ok ? ' (OK)' : ''}`;
+    });
+
+    elStatus.textContent =
+      'Unable to load employees.xlsx from the website. ' +
+      'If you are using GitHub Pages, confirm that /data/employees.xlsx exists in the published site output. ' +
+      (lines.length ? (' Tried:
+' + lines.join('
+')) : '');
+
+    // Reveal the local-file fallback UI if present
+    const elFileBox = document.getElementById('fileFallback');
+    if (elFileBox) elFileBox.classList.remove('hidden');
+  }
+}
+
+async function loadEmployeesFromFile(file) {
+  if (!file) return;
+  try {
+    elStatus.textContent = `Loading ${file.name}…`;
+    const buf = await file.arrayBuffer();
+    const rows = parseExcelArrayBuffer(buf);
+    loaded = false;
+    employeeMap = new Map();
+    loadFromRows(rows);
+  } catch (err) {
+    console.error(err);
+    elStatus.textContent = 'Unable to read the selected Excel file. Please use a valid .xlsx file.';
+  }
+}
 
       employeeMap = map;
       loaded = true;
@@ -148,6 +253,14 @@
   }
 
   elBtn.addEventListener('click', handleSearch);
+
+if (elExcelFile) {
+  elExcelFile.addEventListener('change', () => {
+    const f = elExcelFile.files && elExcelFile.files[0];
+    if (f) loadEmployeesFromFile(f);
+  });
+}
+
   elCode.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') handleSearch();
   });
