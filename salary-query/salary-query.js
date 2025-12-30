@@ -1,5 +1,5 @@
 /* Salary Query
-   - Password protected (10 min unlock): iEnergyS
+   - Password protected (10 min unlock): iEnergyS26
    - Reads an Excel file in the browser (default: ../data/employees.xlsx)
    - Looks up an employee by EmployeeCode and displays key fields
 */
@@ -9,7 +9,7 @@
   // -----------------------------
   // Auth gate (popup style)
   // -----------------------------
-  const PASSWORD = 'iEnergyS';
+  const PASSWORD = 'iEnergyS26';
   const AUTH_KEY = 'salary_query_authed_v1';
   const AUTH_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
