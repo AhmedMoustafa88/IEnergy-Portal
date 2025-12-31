@@ -1,6 +1,6 @@
 /* Salary Query
    - Password protected (10 min unlock): iEnergyS26
-   - Reads an Excel file in the browser (default: ../data/employees.xlsx)
+   - Reads an Excel file in the browser (default: ./employees salaries.xlsx)
    - Looks up an employee by EmployeeCode and displays key fields
 */
 (function () {
@@ -80,7 +80,12 @@
   // -----------------------------
   // Query logic
   // -----------------------------
-  const DEFAULT_XLSX_PATH = '../data/employees.xlsx';
+  const DEFAULT_XLSX_PATH = './employees salaries.xlsx';
+  const FALLBACK_XLSX_PATHS = [
+    DEFAULT_XLSX_PATH,
+    '../data/employees.xlsx', // legacy
+    './employees.xlsx' // legacy
+  ];
 
   // DOM
   const elEmpCode = $('empCode');
@@ -138,11 +143,28 @@
       throw new Error('XLSX library not found.');
     }
 
-    const resp = await fetch(DEFAULT_XLSX_PATH, { cache: 'no-store' });
-    if (!resp.ok) {
-      throw new Error('Unable to load employees.xlsx. Make sure it exists at data/employees.xlsx and is published to GitHub Pages.');
+    let buf = null;
+    let loadedFrom = null;
+
+    for (const p of FALLBACK_XLSX_PATHS) {
+      try {
+        const resp = await fetch(encodeURI(p), { cache: 'no-store' });
+        if (!resp.ok) continue;
+        buf = await resp.arrayBuffer();
+        loadedFrom = p;
+        break;
+      } catch (e) {
+        // try next path
+      }
     }
-    const buf = await resp.arrayBuffer();
+
+    if (!buf) {
+      throw new Error('Unable to load the employee salaries file. Make sure it exists at salary-query/employees salaries.xlsx (preferred) or data/employees.xlsx (legacy), and is published to GitHub Pages.');
+    }
+
+    // Optional: show where we loaded from (useful for troubleshooting)
+    if (loadedFrom && window.console) console.log('Salary Query loaded Excel from:', loadedFrom);
+
     const wb = XLSX.read(buf, { type: 'array' });
     const sheetName = wb.SheetNames[0];
     const ws = wb.Sheets[sheetName];
