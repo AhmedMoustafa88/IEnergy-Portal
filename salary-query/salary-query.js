@@ -1,99 +1,14 @@
 /* Salary Query
-   - Password protected (session unlock up to 15 minutes): iEnergy2026
+   - Role protected (Admin only)
    - Reads an Excel file in the browser (default: ./employees salaries.xlsx)
    - Looks up an employee by EmployeeCode and displays key fields
 */
 (function () {
   'use strict';
 
-  // -----------------------------
-  // Auth gate (popup style)
-  // -----------------------------
-  const PASSWORDS = ["iEnergy2026", "iEnergyS26"];
-  const AUTH_KEY = 'ienergy_portal_session_expiry_v1';
-  const AUTH_TTL_MS = 15 * 60 * 1000; // 15 minutes (max)
-
-
-  const LEGACY_KEYS = ["salary_query_authed_v1", "ienergy_home_authed_v1", "employee_db_authed_v1"];
-
-  function migrateLegacyAuth() {
-    let best = 0;
-    for (const k of LEGACY_KEYS) {
-      const v = Number(sessionStorage.getItem(k) || '0');
-      if (v > best) best = v;
-    }
-    const cur = Number(sessionStorage.getItem(AUTH_KEY) || '0');
-    if (best > cur) sessionStorage.setItem(AUTH_KEY, String(best));
-    for (const k of LEGACY_KEYS) sessionStorage.removeItem(k);
-  }
-
   function $(id) { return document.getElementById(id); }
 
-  function showAuthError(show) {
-    const el = $('authError');
-    if (!el) return;
-    el.hidden = !show;
-  }
-
-  let lockTimer = null;
-
-  function lockApp() {
-    sessionStorage.removeItem(AUTH_KEY);
-    const auth = $('auth');
-    const app = $('app');
-    if (app) app.hidden = true;
-    if (auth) auth.style.display = 'grid';
-    const input = $('passwordInput');
-    if (input) { input.value = ''; input.focus(); }
-  }
-
-  function scheduleLock(expiryMs) {
-    if (lockTimer) clearTimeout(lockTimer);
-    const remaining = expiryMs - Date.now();
-    if (remaining > 0) lockTimer = setTimeout(lockApp, remaining);
-    else lockApp();
-  }
-
-  function unlockApp() {
-    const auth = $('auth');
-    const app = $('app');
-    if (auth) auth.style.display = 'none';
-    if (app) app.hidden = false;
-
-    // Initialize the app once unlocked
-    initQueryApp();
-
-    // Ensure we re-lock after TTL
-    const expiry = Number(sessionStorage.getItem(AUTH_KEY) || '0');
-    if (expiry) scheduleLock(expiry);
-  }
-
-  function handleLogin() {
-    const input = $('passwordInput');
-    const pwd = input ? input.value : '';
-    if (PASSWORDS.includes(pwd)) {
-      migrateLegacyAuth();
-      const expiry = Date.now() + AUTH_TTL_MS;
-      sessionStorage.setItem(AUTH_KEY, String(expiry));
-      showAuthError(false);
-      unlockApp();
-    } else {
-      showAuthError(true);
-      if (input) input.focus();
-    }
-  }
-
-  function ensureAuth() {
-    migrateLegacyAuth();
-    const expiry = Number(sessionStorage.getItem(AUTH_KEY) || '0');
-    if (expiry && expiry > Date.now()) {
-      unlockApp();
-      return;
-    }
-    lockApp();
-  }
-
-  // -----------------------------
+// -----------------------------
   // Query logic
   // -----------------------------
   const DEFAULT_XLSX_PATH = './employees salaries.xlsx';
@@ -283,22 +198,21 @@
       document.head.appendChild(s);
     }
   }
-
-  // -----------------------------
+// -----------------------------
   // Boot
   // -----------------------------
   document.addEventListener('DOMContentLoaded', () => {
-    const btnLogin = $('btnLogin');
-    const pwd = $('passwordInput');
+    if (!window.IEnergyAuth) {
+      // Fail closed
+      const auth = $('auth');
+      if (auth) auth.style.display = 'grid';
+      return;
+    }
 
-    if (btnLogin) btnLogin.addEventListener('click', handleLogin);
-    if (pwd) pwd.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Enter') {
-        ev.preventDefault();
-        handleLogin();
-      }
+    IEnergyAuth.ensureAuth({
+      allowedRoles: ['admin'],
+      homeHref: '../index.html',
+      onAuthed: () => { initQueryApp(); }
     });
-
-    ensureAuth();
   });
 })();
