@@ -55,6 +55,16 @@
     </footer>
   </main>
 
+  <script src="../auth.js?v=2"></script>
+  <script>
+    (function () {
+      'use strict';
+      document.addEventListener('DOMContentLoaded', () => {
+        IEnergyAuth.ensureAuth({ allowedRoles: ['admin'], homeHref: '../index.html' });
+      });
+    })();
+  </script>
+
   <script src="salary-query.js?v=5"></script>
   <script>document.getElementById('year').textContent = String(new Date().getFullYear());</script>
 </body>
